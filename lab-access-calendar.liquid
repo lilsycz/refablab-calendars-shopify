@@ -1,0 +1,562 @@
+{% assign daytime_product = blank %}
+{% assign evening_product = blank %}
+{% for product in collections.all.products %}
+  {% if product.template_suffix == 'day-use' and daytime_product == blank %}
+    {% assign daytime_product = product %}
+  {% endif %}
+  {% if product.template_suffix == 'membership' and evening_product == blank %}
+    {% assign evening_product = product %}
+  {% endif %}
+{% endfor %}
+
+{% assign has_daytime = false %}
+{% assign has_evening = false %}
+{% if customer.tags contains 'daytime-purchased' %}{% assign has_daytime = true %}{% endif %}
+{% if customer.tags contains 'evening-purchased' %}{% assign has_evening = true %}{% endif %}
+
+{% if request.locale.iso_code == 'sv' %}
+  {% assign i18n_months    = "Januari,Februari,Mars,April,Maj,Juni,Juli,Augusti,September,Oktober,November,December" %}
+  {% assign i18n_days      = "Mån,Tis,Ons,Tor,Fre,Lör,Sön" %}
+  {% assign i18n_daytime   = "Dagtid" %}
+  {% assign i18n_evening   = "Kväll" %}
+  {% assign i18n_unavail   = "Ej tillgänglig" %}
+  {% assign i18n_slot_unavail  = "Den här tiden är inte tillgänglig." %}
+  {% assign i18n_has_pkg   = "Du har ett aktivt paket. Gå till dina beställningar för att boka en session." %}
+  {% assign i18n_go_orders = "Gå till mina beställningar →" %}
+  {% assign i18n_view_det  = "Visa detaljer →" %}
+{% else %}
+  {% assign i18n_months    = "January,February,March,April,May,June,July,August,September,October,November,December" %}
+  {% assign i18n_days      = "Mon,Tue,Wed,Thu,Fri,Sat,Sun" %}
+  {% assign i18n_daytime   = "Daytime" %}
+  {% assign i18n_evening   = "Evening" %}
+  {% assign i18n_unavail   = "Unavailable" %}
+  {% assign i18n_slot_unavail  = "This slot is unavailable." %}
+  {% assign i18n_has_pkg   = "You have an active package. Go to your orders to book a session." %}
+  {% assign i18n_go_orders = "Go to My Orders →" %}
+  {% assign i18n_view_det  = "View details →" %}
+{% endif %}
+
+<style>
+  .lab-calendar {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    font-family: var(--font-body--family);
+  }
+  .lab-calendar__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .lab-calendar__title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .lab-calendar__btn {
+    background: none;
+    border: 1px solid var(--color-foreground);
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--color-foreground);
+  }
+  .lab-calendar__btn:hover {
+    background: var(--color-foreground);
+    color: var(--color-background);
+  }
+  .lab-calendar__legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 0.8rem;
+  }
+  .lab-calendar__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .lab-calendar__legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .lab-calendar__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .lab-calendar__day-header {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 8px 0;
+    color: var(--color-foreground);
+    opacity: 0.5;
+    text-transform: uppercase;
+  }
+  .lab-calendar__cell {
+    min-height: 80px;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 4px;
+    background: var(--color-background);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .lab-calendar__cell--empty {
+    background: rgba(0,0,0,0.02);
+  }
+  .lab-calendar__date-num {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    margin-bottom: 3px;
+    opacity: 0.6;
+  }
+  .lab-calendar__slot {
+    display: block;
+    margin-bottom: 3px;
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    text-align: left;
+    padding: 0;
+    background: none;
+  }
+  .lab-calendar__slot-info {
+    padding: 2px 4px;
+    font-size: 0.62rem;
+    line-height: 1.3;
+  }
+  .lab-calendar__slot--daytime .lab-calendar__slot-info {
+    background: #E1F5EE;
+    color: #0F6E56;
+  }
+  .lab-calendar__slot--evening .lab-calendar__slot-info {
+    background: #FAEEDA;
+    color: #854F0B;
+  }
+  .lab-calendar__slot--unavailable .lab-calendar__slot-info {
+    background: #F1EFE8;
+    color: #888780;
+    text-decoration: line-through;
+  }
+  #lab-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #lab-modal-inner {
+    background: var(--color-background);
+    width: 90%;
+    max-width: 360px;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+  #lab-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.4);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 10;
+    line-height: 1;
+  }
+  #lab-modal-img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    display: block;
+  }
+  #lab-modal-body { padding: 20px; }
+  #lab-modal-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    margin-bottom: 6px;
+  }
+  #lab-modal-time {
+    font-size: 0.85rem;
+    color: var(--color-foreground);
+    opacity: 0.7;
+    margin-bottom: 12px;
+  }
+  #lab-modal-message {
+    font-size: 0.85rem;
+    color: var(--color-foreground);
+    opacity: 0.8;
+    margin-bottom: 12px;
+    line-height: 1.5;
+    display: none;
+  }
+  #lab-modal-link {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    background: var(--color-foreground);
+    color: var(--color-background);
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  #lab-modal-link:hover { opacity: 0.8; }
+
+  @media (max-width: 768px) {
+    .lab-calendar__cell { min-height: 40px; padding: 2px; }
+    .lab-calendar__slot-info { font-size: 0.55rem; }
+    .lab-calendar__date-num  { font-size: 0.6rem; }
+  }
+</style>
+
+<div id="lab-modal">
+  <div id="lab-modal-inner">
+    <button id="lab-modal-close">×</button>
+    <img id="lab-modal-img" src="" alt="">
+    <div id="lab-modal-body">
+      <div id="lab-modal-title"></div>
+      <div id="lab-modal-time"></div>
+      <div id="lab-modal-message"></div>
+      <a id="lab-modal-link" href="#"></a>
+    </div>
+  </div>
+</div>
+
+<div class="lab-calendar">
+  <div class="lab-calendar__nav">
+    <button class="lab-calendar__btn" id="lab-prev">&#8592;</button>
+    <div class="lab-calendar__title" id="lab-month-title"></div>
+    <button class="lab-calendar__btn" id="lab-next">&#8594;</button>
+  </div>
+  <div class="lab-calendar__legend">
+    <div class="lab-calendar__legend-item">
+      <div class="lab-calendar__legend-dot" style="background:#1D9E75;"></div>
+      <span>{{ i18n_daytime }}</span>
+    </div>
+    <div class="lab-calendar__legend-item">
+      <div class="lab-calendar__legend-dot" style="background:#BA7517;"></div>
+      <span>{{ i18n_evening }}</span>
+    </div>
+    <div class="lab-calendar__legend-item">
+      <div class="lab-calendar__legend-dot" style="background:#B4B2A9;"></div>
+      <span>{{ i18n_unavail }}</span>
+    </div>
+  </div>
+  <div class="lab-calendar__grid" id="lab-grid"></div>
+</div>
+
+<script>
+  var monthNames = {{ i18n_months | split: ',' | json }};
+  var dayHeaders  = {{ i18n_days   | split: ',' | json }};
+  var i18n = {
+    slotUnavail : {{ i18n_slot_unavail | json }},
+    hasPkg      : {{ i18n_has_pkg      | json }},
+    goOrders    : {{ i18n_go_orders    | json }},
+    viewDetails : {{ i18n_view_det     | json }}
+  };
+
+  var labSchedule = [
+    {% for block in section.blocks %}
+      {% if block.type == 'schedule' %}
+        {
+          day  : {{ block.settings.day        | downcase | json }},
+          start: {{ block.settings.start_time | json }},
+          end  : {{ block.settings.end_time   | json }},
+          type : {{ block.settings.type       | json }}
+        },
+      {% endif %}
+    {% endfor %}
+  ];
+
+  var labExceptions = [
+    {% for block in section.blocks %}
+      {% if block.type == 'exception' %}
+        {
+          date  : {{ block.settings.date       | json }},
+          start : {{ block.settings.start_time | json }},
+          end   : {{ block.settings.end_time   | json }},
+          type  : {{ block.settings.type       | json }},
+          status: {{ block.settings.status     | json }}
+        },
+      {% endif %}
+    {% endfor %}
+  ];
+
+  var workshopDates = [
+    {% for product in collections.all.products %}
+      {% assign target_templates = "beginner-a,beginner-b,special-single-classes" | split: "," %}
+      {% if target_templates contains product.template_suffix %}
+        {% if product.metafields.custom.event_dates != blank %}
+          {% assign raw_duration = product.metafields.custom.duration_for_each_class_in_hours.value %}
+          {% if raw_duration == blank %}{% assign raw_duration = 3 %}{% endif %}
+          {% assign duration = raw_duration | times: 60 %}
+          {% for event_date in product.metafields.custom.event_dates.value %}
+            {% assign date_str  = event_date | date: '%Y-%m-%d' %}
+            {% assign start_str = event_date | date: '%H:%M' %}
+            {% assign end_str   = blank %}
+            {% if product.metafields.custom.spacial_ending_time != blank %}
+              {% for special in product.metafields.custom.spacial_ending_time.value %}
+                {% assign special_date = special | date: '%Y-%m-%d' %}
+                {% if special_date == date_str %}{% assign end_str = special | date: '%H:%M' %}{% endif %}
+              {% endfor %}
+            {% endif %}
+            { date: "{{ date_str }}", start: "{{ start_str }}", end: "{{ end_str }}", duration: {{ duration }} },
+          {% endfor %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  ];
+
+  var daytimeImg   = {{ daytime_product.featured_image | image_url: width: 400 | json }};
+  var eveningImg   = {{ evening_product.featured_image | image_url: width: 400 | json }};
+  var daytimeTitle = {{ daytime_product.title | json }};
+  var eveningTitle = {{ evening_product.title | json }};
+  var daytimeUrl   = {{ daytime_product.url   | json }};
+  var eveningUrl   = {{ evening_product.url   | json }};
+  var hasDaytime   = {{ has_daytime | json }};
+  var hasEvening   = {{ has_evening | json }};
+  var ordersUrl    = "{{ routes.account_url }}/orders";
+
+  var dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+  var labCurrent = new Date();
+  labCurrent.setDate(1);
+
+  function timeToMinutes(t) {
+    var p = t.split(':');
+    return parseInt(p[0]) * 60 + parseInt(p[1]);
+  }
+
+  function isWorkshopConflict(dateStr, start, end) {
+    return workshopDates.some(function(w) {
+      if (w.date !== dateStr) return false;
+      var wStart = timeToMinutes(w.start);
+      var wEnd   = w.end ? timeToMinutes(w.end) : wStart + w.duration;
+      return wStart < timeToMinutes(end) && wEnd > timeToMinutes(start);
+    });
+  }
+
+  function isException(dateStr, start, end, type) {
+    return labExceptions.find(function(e) {
+      return e.date === dateStr && e.start === start && e.end === end && e.type === type;
+    });
+  }
+
+  function getSlotsForDate(dateStr, dayName) {
+    var slots = [];
+    labSchedule.forEach(function(s) {
+      if (s.day !== dayName) return;
+      var exc = isException(dateStr, s.start, s.end, s.type);
+      var unavailable = (exc && exc.status === 'closed') || isWorkshopConflict(dateStr, s.start, s.end);
+      slots.push({ start: s.start, end: s.end, type: s.type, unavailable: unavailable });
+    });
+    labExceptions.forEach(function(e) {
+      if (e.date !== dateStr || e.status !== 'open') return;
+      var exists = slots.find(function(s) {
+        return s.start === e.start && s.end === e.end && s.type === e.type;
+      });
+      if (!exists) slots.push({ start: e.start, end: e.end, type: e.type, unavailable: false });
+    });
+    slots.sort(function(a, b) { return timeToMinutes(a.start) - timeToMinutes(b.start); });
+    return slots;
+  }
+
+  function openModal(slot, dateStr) {
+    var isDaytime    = slot.type === 'daytime';
+    var hasPurchased = isDaytime ? hasDaytime : hasEvening;
+
+    document.getElementById('lab-modal-img').src           = (isDaytime ? daytimeImg : eveningImg) || '';
+    document.getElementById('lab-modal-title').textContent = isDaytime ? daytimeTitle : eveningTitle;
+    document.getElementById('lab-modal-time').textContent  = dateStr + ' | ' + slot.start + ' – ' + slot.end;
+
+    var msgEl  = document.getElementById('lab-modal-message');
+    var linkEl = document.getElementById('lab-modal-link');
+
+    if (slot.unavailable) {
+      msgEl.textContent    = i18n.slotUnavail;
+      msgEl.style.display  = 'block';
+      linkEl.style.display = 'none';
+    } else if (hasPurchased) {
+      msgEl.textContent    = i18n.hasPkg;
+      msgEl.style.display  = 'block';
+      linkEl.textContent   = i18n.goOrders;
+      linkEl.href          = ordersUrl;
+      linkEl.style.display = 'block';
+    } else {
+      msgEl.style.display  = 'none';
+      linkEl.textContent   = i18n.viewDetails;
+      linkEl.href          = isDaytime ? daytimeUrl : eveningUrl;
+      linkEl.style.display = 'block';
+    }
+
+    document.getElementById('lab-modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('lab-modal').style.display = 'none';
+  }
+
+  function labRender() {
+    var year  = labCurrent.getFullYear();
+    var month = labCurrent.getMonth();
+    document.getElementById('lab-month-title').textContent = monthNames[month] + ' ' + year;
+
+    var grid = document.getElementById('lab-grid');
+    grid.querySelectorAll('.lab-calendar__cell').forEach(function(c) { c.remove(); });
+
+    if (!grid.querySelector('.lab-calendar__day-header')) {
+      dayHeaders.forEach(function(d) {
+        var h = document.createElement('div');
+        h.className   = 'lab-calendar__day-header';
+        h.textContent = d;
+        grid.appendChild(h);
+      });
+    }
+
+    var firstDay    = (new Date(year, month, 1).getDay() + 6) % 7;
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (var i = 0; i < firstDay; i++) {
+      var empty = document.createElement('div');
+      empty.className = 'lab-calendar__cell lab-calendar__cell--empty';
+      grid.appendChild(empty);
+    }
+
+    for (var d = 1; d <= daysInMonth; d++) {
+      var cell = document.createElement('div');
+      cell.className = 'lab-calendar__cell';
+
+      var dateNum = document.createElement('div');
+      dateNum.className   = 'lab-calendar__date-num';
+      dateNum.textContent = d;
+      cell.appendChild(dateNum);
+
+      var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      var dayName = dayNames[new Date(year, month, d).getDay()];
+      var slots   = getSlotsForDate(dateStr, dayName);
+
+      slots.forEach(function(slot) {
+        var btn = document.createElement('button');
+        btn.className = 'lab-calendar__slot lab-calendar__slot--' + slot.type;
+        if (slot.unavailable) btn.classList.add('lab-calendar__slot--unavailable');
+
+        var info = document.createElement('div');
+        info.className   = 'lab-calendar__slot-info';
+        info.textContent = slot.start + '–' + slot.end;
+        btn.appendChild(info);
+
+        (function(s, ds) {
+          btn.addEventListener('click', function() { openModal(s, ds); });
+        })(slot, dateStr);
+
+        cell.appendChild(btn);
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('lab-prev').addEventListener('click', function() {
+    labCurrent.setMonth(labCurrent.getMonth() - 1);
+    labRender();
+  });
+  document.getElementById('lab-next').addEventListener('click', function() {
+    labCurrent.setMonth(labCurrent.getMonth() + 1);
+    labRender();
+  });
+  document.getElementById('lab-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+  document.getElementById('lab-modal-close').addEventListener('click', closeModal);
+
+  labRender();
+</script>
+
+{% schema %}
+{
+  "name": "Lab Access Calendar",
+  "blocks": [
+    {
+      "type": "schedule",
+      "name": "Weekly Schedule",
+      "settings": [
+        {
+          "type": "select",
+          "id": "day",
+          "label": "Day of week",
+          "options": [
+            { "value": "monday",    "label": "Monday" },
+            { "value": "tuesday",   "label": "Tuesday" },
+            { "value": "wednesday", "label": "Wednesday" },
+            { "value": "thursday",  "label": "Thursday" },
+            { "value": "friday",    "label": "Friday" },
+            { "value": "saturday",  "label": "Saturday" },
+            { "value": "sunday",    "label": "Sunday" }
+          ],
+          "default": "monday"
+        },
+        { "type": "text", "id": "start_time", "label": "Start time", "placeholder": "09:00" },
+        { "type": "text", "id": "end_time",   "label": "End time",   "placeholder": "13:00" },
+        {
+          "type": "select",
+          "id": "type",
+          "label": "Type",
+          "options": [
+            { "value": "daytime", "label": "Daytime" },
+            { "value": "evening", "label": "Evening" }
+          ],
+          "default": "daytime"
+        }
+      ]
+    },
+    {
+      "type": "exception",
+      "name": "Exception Date",
+      "settings": [
+        { "type": "text", "id": "date",       "label": "Date",       "placeholder": "2026-04-14" },
+        { "type": "text", "id": "start_time", "label": "Start time", "placeholder": "09:00" },
+        { "type": "text", "id": "end_time",   "label": "End time",   "placeholder": "13:00" },
+        {
+          "type": "select",
+          "id": "type",
+          "label": "Type",
+          "options": [
+            { "value": "daytime", "label": "Daytime" },
+            { "value": "evening", "label": "Evening" }
+          ],
+          "default": "daytime"
+        },
+        {
+          "type": "select",
+          "id": "status",
+          "label": "Status",
+          "options": [
+            { "value": "closed", "label": "Closed" },
+            { "value": "open",   "label": "Open (extra slot)" }
+          ],
+          "default": "closed"
+        }
+      ]
+    }
+  ],
+  "settings": [],
+  "presets": [{ "name": "Lab Access Calendar" }]
+}
+{% endschema %}
