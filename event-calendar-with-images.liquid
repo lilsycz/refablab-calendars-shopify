@@ -1,0 +1,405 @@
+{% if request.locale.iso_code == 'sv' %}
+  {% assign i18n_months     = "Januari,Februari,Mars,April,Maj,Juni,Juli,Augusti,September,Oktober,November,December" %}
+  {% assign i18n_days       = "Mån,Tis,Ons,Tor,Fre,Lör,Sön" %}
+  {% assign i18n_view_det   = "Visa detaljer →" %}
+{% else %}
+  {% assign i18n_months     = "January,February,March,April,May,June,July,August,September,October,November,December" %}
+  {% assign i18n_days       = "Mon,Tue,Wed,Thu,Fri,Sat,Sun" %}
+  {% assign i18n_view_det   = "View details →" %}
+{% endif %}
+
+<style>
+  .refab-calendar {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    font-family: var(--font-body--family);
+  }
+  .refab-calendar__header {
+    margin-bottom: 8px;
+  }
+  .refab-calendar__section-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    margin-bottom: 4px;
+    font-family: var(--font-accent--family);
+  }
+  .refab-calendar__hint {
+    font-size: 0.85rem;
+    color: var(--color-foreground);
+    opacity: 0.6;
+    margin-bottom: 20px;
+  }
+  .refab-calendar__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .refab-calendar__month-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .refab-calendar__btn {
+    background: none;
+    border: 1px solid var(--color-foreground);
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--color-foreground);
+  }
+  .refab-calendar__btn:hover {
+    background: var(--color-foreground);
+    color: var(--color-background);
+  }
+  .refab-calendar__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .refab-calendar__day-header {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 8px 0;
+    color: var(--color-foreground);
+    opacity: 0.5;
+    text-transform: uppercase;
+  }
+  .refab-calendar__cell {
+    min-height: 80px;
+    overflow-y: auto;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 6px;
+    background: var(--color-background);
+  }
+  .refab-calendar__cell--empty {
+    background: rgba(0,0,0,0.02);
+  }
+  .refab-calendar__date-num {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    margin-bottom: 4px;
+    opacity: 0.6;
+  }
+  .refab-calendar__event {
+    display: block;
+    text-decoration: none;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.08);
+    cursor: pointer;
+  }
+  .refab-calendar__event img {
+    width: 100%;
+    height: 40px;
+    object-fit: cover;
+    display: block;
+  }
+  .refab-calendar__event-info {
+    padding: 4px 6px;
+    background: var(--color-background);
+  }
+  .refab-calendar__event-time {
+    font-size: 0.62rem;
+    color: var(--color-foreground);
+    opacity: 0.7;
+  }
+  .refab-calendar__event-title {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    line-height: 1.3;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #refab-mobile-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #refab-modal-inner {
+    background: var(--color-background);
+    width: 80%;
+    max-width: 320px;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+  #refab-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.4);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 10;
+    line-height: 1;
+  }
+  #refab-modal-img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+  }
+  #refab-modal-body {
+    padding: 20px;
+  }
+  #refab-modal-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    margin-bottom: 8px;
+  }
+  #refab-modal-time {
+    font-size: 0.85rem;
+    color: var(--color-foreground);
+    opacity: 0.7;
+    margin-bottom: 16px;
+  }
+  #refab-modal-desc {
+    font-size: 0.8rem;
+    color: var(--color-foreground);
+    opacity: 0.8;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  #refab-modal-link {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    background: var(--color-foreground);
+    color: var(--color-background);
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  #refab-modal-link:hover { opacity: 0.8; }
+
+  @media (max-width: 768px) {
+    .refab-calendar { padding: 20px 4px; }
+    .refab-calendar__grid { gap: 1px; }
+    .refab-calendar__cell { min-height: 40px; padding: 2px; }
+    .refab-calendar__date-num { font-size: 0.6rem; }
+    .refab-calendar__event { margin-bottom: 2px; border: none; border-radius: 0; }
+    .refab-calendar__event img { height: 50px; }
+    .refab-calendar__event-info { display: none; }
+  }
+</style>
+
+<div id="refab-mobile-modal">
+  <div id="refab-modal-inner">
+    <button id="refab-modal-close">×</button>
+    <img id="refab-modal-img" src="" alt="">
+    <div id="refab-modal-body">
+      <div id="refab-modal-title"></div>
+      <div id="refab-modal-time"></div>
+      <div id="refab-modal-desc"></div>
+      <a id="refab-modal-link" href="#"></a>
+    </div>
+  </div>
+</div>
+
+<div class="refab-calendar">
+  <div class="refab-calendar__header">
+    <div class="refab-calendar__section-title">{{ i18n_cal_title }}</div>
+    <div class="refab-calendar__hint">{{ i18n_cal_hint }}</div>
+  </div>
+  <div class="refab-calendar__nav">
+    <button class="refab-calendar__btn" id="refab-prev">&#8592;</button>
+    <div class="refab-calendar__month-title" id="refab-month-title"></div>
+    <button class="refab-calendar__btn" id="refab-next">&#8594;</button>
+  </div>
+  <div class="refab-calendar__grid" id="refab-grid"></div>
+</div>
+
+<script>
+  var monthNames = {{ i18n_months | split: ',' | json }};
+  var dayHeaders  = {{ i18n_days   | split: ',' | json }};
+  var i18nViewDetails = {{ i18n_view_det | json }};
+
+  var refabEvents = [
+    {% for product in collections.all.products %}
+      {% assign target_templates = "beginner-a,beginner-b,special-single-classes,team-building" | split: "," %}
+      {% if target_templates contains product.template_suffix %}
+        {% if product.metafields.custom.event_dates != blank %}
+          {% assign raw_duration = product.metafields.custom.duration_for_each_class_in_hours.value %}
+          {% if raw_duration == blank %}{% assign raw_duration = 3 %}{% endif %}
+          {% assign duration = raw_duration | times: 60 %}
+          {% for event_date in product.metafields.custom.event_dates.value %}
+            {% assign date_str  = event_date | date: '%Y-%m-%d' %}
+            {% assign start_str = event_date | date: '%H:%M' %}
+            {% assign end_str   = blank %}
+            {% if product.metafields.custom.spacial_ending_time != blank %}
+              {% for special in product.metafields.custom.spacial_ending_time.value %}
+                {% assign special_date = special | date: '%Y-%m-%d' %}
+                {% if special_date == date_str %}{% assign end_str = special | date: '%H:%M' %}{% endif %}
+              {% endfor %}
+            {% endif %}
+            {
+              date       : "{{ date_str }}",
+              time       : "{{ start_str }}",
+              endTime    : "{{ end_str }}",
+              duration   : {{ duration }},
+              title      : {{ product.title | json }},
+              url        : {{ product.url   | json }},
+              image      : {{ product.featured_image | image_url: width: 400 | json }},
+              description: {{ product.metafields.custom.short_description.value | json }}
+            },
+          {% endfor %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  ];
+
+  var refabCurrent = new Date();
+  refabCurrent.setDate(1);
+
+  function calcEndTime(ev) {
+    if (ev.endTime) return ev.endTime;
+    if (!ev.duration) return '';
+    var mins = parseInt(ev.time.split(':')[0]) * 60 + parseInt(ev.time.split(':')[1]) + ev.duration;
+    return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+  }
+
+  function openModal(ev) {
+    var end = calcEndTime(ev);
+    document.getElementById('refab-modal-img').src           = ev.image || '';
+    document.getElementById('refab-modal-title').textContent = ev.title;
+    document.getElementById('refab-modal-time').textContent  = ev.time + (end ? ' – ' + end : '');
+    document.getElementById('refab-modal-desc').textContent  = ev.description || '';
+    document.getElementById('refab-modal-link').textContent  = i18nViewDetails;
+    document.getElementById('refab-modal-link').href         = ev.url;
+    document.getElementById('refab-mobile-modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('refab-mobile-modal').style.display = 'none';
+  }
+
+  function refabRender() {
+    var year  = refabCurrent.getFullYear();
+    var month = refabCurrent.getMonth();
+    document.getElementById('refab-month-title').textContent = monthNames[month] + ' ' + year;
+
+    var grid = document.getElementById('refab-grid');
+    grid.querySelectorAll('.refab-calendar__cell').forEach(function(c) { c.remove(); });
+
+    if (!grid.querySelector('.refab-calendar__day-header')) {
+      dayHeaders.forEach(function(d) {
+        var h = document.createElement('div');
+        h.className   = 'refab-calendar__day-header';
+        h.textContent = d;
+        grid.appendChild(h);
+      });
+    }
+
+    var firstDay    = (new Date(year, month, 1).getDay() + 6) % 7;
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (var i = 0; i < firstDay; i++) {
+      var empty = document.createElement('div');
+      empty.className = 'refab-calendar__cell refab-calendar__cell--empty';
+      grid.appendChild(empty);
+    }
+
+    for (var d = 1; d <= daysInMonth; d++) {
+      var cell = document.createElement('div');
+      cell.className = 'refab-calendar__cell';
+
+      var dateNum = document.createElement('div');
+      dateNum.className   = 'refab-calendar__date-num';
+      dateNum.textContent = d;
+      cell.appendChild(dateNum);
+
+      var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+
+      refabEvents.forEach(function(ev) {
+        if (ev.date !== dateStr) return;
+
+        var link = document.createElement('a');
+        link.className = 'refab-calendar__event';
+        link.href = '#';
+
+        if (ev.image) {
+          var img = document.createElement('img');
+          img.src = ev.image;
+          img.alt = ev.title;
+          link.appendChild(img);
+        }
+
+        var end  = calcEndTime(ev);
+        var info = document.createElement('div');
+        info.className = 'refab-calendar__event-info';
+
+        var timeEl = document.createElement('div');
+        timeEl.className   = 'refab-calendar__event-time';
+        timeEl.textContent = ev.time + (end ? ' – ' + end : '');
+        info.appendChild(timeEl);
+
+        var titleEl = document.createElement('div');
+        titleEl.className   = 'refab-calendar__event-title';
+        titleEl.textContent = ev.title;
+        info.appendChild(titleEl);
+
+        link.appendChild(info);
+
+        (function(e) {
+          link.addEventListener('click', function(evt) {
+            evt.preventDefault();
+            openModal(e);
+          });
+        })(ev);
+
+        cell.appendChild(link);
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('refab-prev').addEventListener('click', function() {
+    refabCurrent.setMonth(refabCurrent.getMonth() - 1);
+    refabRender();
+  });
+  document.getElementById('refab-next').addEventListener('click', function() {
+    refabCurrent.setMonth(refabCurrent.getMonth() + 1);
+    refabRender();
+  });
+  document.getElementById('refab-mobile-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+  document.getElementById('refab-modal-close').addEventListener('click', closeModal);
+
+  refabRender();
+</script>
+
+{% schema %}
+{
+  "name": "Event Calendar w/ Images",
+  "settings": [],
+  "presets": [
+    {
+      "name": "Event Calendar with Images"
+    }
+  ]
+}
+{% endschema %}
